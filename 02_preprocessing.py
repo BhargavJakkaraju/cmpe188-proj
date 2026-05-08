@@ -2,8 +2,8 @@
 Data Preprocessing and Cleaning
 Early-Stage Diabetes Risk Prediction System
 
-Handles zero-value imputation (stratified median), train/test split,
-feature scaling, and class weight computation.
+Handles data cleaning, zero/missing-value imputation, feature engineering,
+train/test split, feature scaling, class imbalance handling, and artifact export.
 """
 
 import ssl
@@ -16,6 +16,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.utils import resample
 
 DATA_URL = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv"
 LOCAL_DATA_PATH = "data/pima-indians-diabetes.csv"
@@ -44,6 +45,29 @@ def load_data(url=DATA_URL, local_path=LOCAL_DATA_PATH):
         print(f"Error loading data: {e}")
         return None
     return df
+
+
+def clean_dataset(df):
+    """Normalize schema artifacts and ensure numeric dtypes."""
+    df_clean = df.copy()
+
+    if str(df_clean.iloc[0]['Pregnancies']) == 'Pregnancies':
+        df_clean = df_clean.iloc[1:].reset_index(drop=True)
+
+    for col in COLUMN_NAMES:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+
+    before_drop = len(df_clean)
+    df_clean = df_clean.dropna().drop_duplicates().reset_index(drop=True)
+    dropped = before_drop - len(df_clean)
+
+    print("\n" + "="*70)
+    print("DATA CLEANING")
+    print("="*70)
+    print(f"  Removed invalid/duplicate rows: {dropped}")
+    print(f"  Remaining rows: {len(df_clean)}")
+
+    return df_clean
 
 
 def impute_zeros_stratified(df):
@@ -76,6 +100,30 @@ def impute_zeros_stratified(df):
     return df_clean
 
 
+def engineer_features(df):
+    """Create clinically-inspired interaction and ratio features."""
+    df_feat = df.copy()
+    eps = 1e-6
+
+    df_feat['Glucose_BMI_Interaction'] = df_feat['Glucose'] * df_feat['BMI']
+    df_feat['Age_BMI_Interaction'] = df_feat['Age'] * df_feat['BMI']
+    df_feat['Insulin_Glucose_Ratio'] = df_feat['Insulin'] / (df_feat['Glucose'] + eps)
+    df_feat['RiskScore_Glucose_Age_BMI'] = (
+        0.5 * df_feat['Glucose'] + 0.3 * df_feat['BMI'] + 0.2 * df_feat['Age']
+    )
+
+    print("\n" + "="*70)
+    print("FEATURE ENGINEERING")
+    print("="*70)
+    print("  Added features:")
+    print("   - Glucose_BMI_Interaction")
+    print("   - Age_BMI_Interaction")
+    print("   - Insulin_Glucose_Ratio")
+    print("   - RiskScore_Glucose_Age_BMI")
+
+    return df_feat
+
+
 def split_data(df, test_size=0.2, random_state=42):
     """Stratified 80/20 train/test split."""
     X = df.drop(columns=['Outcome'])
@@ -93,6 +141,49 @@ def split_data(df, test_size=0.2, random_state=42):
     print(f"  Test class distribution:  {y_test.value_counts(normalize=True).to_dict()}")
 
     return X_train, X_test, y_train, y_test
+
+
+def oversample_minority_class(X_train, y_train, random_state=42):
+    """Randomly oversample minority class in training split only."""
+    train_df = X_train.copy()
+    train_df['Outcome'] = y_train.values
+
+    majority = train_df[train_df['Outcome'] == 0]
+    minority = train_df[train_df['Outcome'] == 1]
+
+    if len(minority) == 0 or len(majority) == 0:
+        print("\nClass imbalance handling skipped: one class missing.")
+        return X_train, y_train
+
+    if len(minority) < len(majority):
+        minority_upsampled = resample(
+            minority,
+            replace=True,
+            n_samples=len(majority),
+            random_state=random_state
+        )
+        balanced = pd.concat([majority, minority_upsampled], axis=0)
+    else:
+        majority_upsampled = resample(
+            majority,
+            replace=True,
+            n_samples=len(minority),
+            random_state=random_state
+        )
+        balanced = pd.concat([majority_upsampled, minority], axis=0)
+
+    balanced = balanced.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
+    X_train_bal = balanced.drop(columns=['Outcome'])
+    y_train_bal = balanced['Outcome']
+
+    print("\n" + "="*70)
+    print("CLASS IMBALANCE HANDLING")
+    print("="*70)
+    print(f"  Original train distribution: {y_train.value_counts().to_dict()}")
+    print(f"  Balanced train distribution: {y_train_bal.value_counts().to_dict()}")
+    print("  Method: Random over-sampling on training set")
+
+    return X_train_bal, y_train_bal
 
 
 def scale_features(X_train, X_test, output_dir="results"):
@@ -155,6 +246,15 @@ def save_datasets(X_train, X_test, y_train, y_test, data_dir="data"):
         print(f"  {data_dir}/{name}.csv")
 
 
+def save_balanced_training_set(X_train_bal, y_train_bal, data_dir="data"):
+    """Save balanced training split for models that do not use class weights."""
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    X_train_bal.to_csv(f"{data_dir}/X_train_balanced.csv", index=False)
+    y_train_bal.to_csv(f"{data_dir}/y_train_balanced.csv", index=False)
+    print(f"  {data_dir}/X_train_balanced.csv")
+    print(f"  {data_dir}/y_train_balanced.csv")
+
+
 def visualize_preprocessing(df_raw, df_clean, output_dir="results"):
     """Side-by-side histograms of imputed features before and after cleaning."""
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -190,38 +290,38 @@ def main():
     print("Data Preprocessing and Cleaning")
     print("="*70)
 
-    df = load_data()
-    if df is None:
+    df_raw = load_data()
+    if df_raw is None:
         print("Failed to load data. Exiting.")
         return
 
-    # Drop duplicate header row if present (artifact of saving with names on first load)
-    if df.iloc[0]['Pregnancies'] == 'Pregnancies':
-        df = df.iloc[1:].reset_index(drop=True)
-        for col in COLUMN_NAMES:
-            df[col] = pd.to_numeric(df[col])
+    df = clean_dataset(df_raw)
 
     df_clean = impute_zeros_stratified(df)
+    df_featured = engineer_features(df_clean)
 
     print("\n" + "="*70)
     print("GENERATING BEFORE/AFTER VISUALIZATIONS")
     print("="*70)
     visualize_preprocessing(df, df_clean)
 
-    X_train, X_test, y_train, y_test = split_data(df_clean)
+    X_train, X_test, y_train, y_test = split_data(df_featured)
 
-    X_train_scaled, X_test_scaled, _ = scale_features(X_train, X_test)
+    X_train_bal, y_train_bal = oversample_minority_class(X_train, y_train)
 
-    compute_class_weights(y_train)
+    X_train_bal_scaled, X_test_scaled, _ = scale_features(X_train_bal, X_test)
 
-    save_datasets(X_train_scaled, X_test_scaled, y_train, y_test)
+    compute_class_weights(y_train_bal)
+
+    save_datasets(X_train_bal_scaled, X_test_scaled, y_train_bal, y_test)
+    save_balanced_training_set(X_train_bal, y_train_bal)
 
     print("\n" + "="*70)
     print("PREPROCESSING COMPLETE!")
     print("="*70)
     print("Next steps:")
     print("1. Review results/05_preprocessing_before_after.png")
-    print("2. Train models using data/X_train.csv + data/y_train.csv")
+    print("2. Train models using data/X_train.csv + data/y_train.csv (balanced + scaled)")
     print("3. Pass results/class_weights.pkl to model constructors")
     print("4. Use results/scaler.pkl for inference pipeline")
     print("="*70 + "\n")
