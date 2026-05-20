@@ -2,6 +2,7 @@
 
 ## Team Members
 - Bhargav Jakkaraju
+
 ---
 
 ## Problem Statement
@@ -20,7 +21,7 @@ This project aims to develop a machine learning-based predictive system that can
 
 **Primary Dataset:** Pima Indians Diabetes Dataset
 
-**Source:** 
+**Source:**
 - UCI Machine Learning Repository: https://archive.ics.uci.edu/ml/datasets/Diabetes
 - Kaggle Mirror: https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database
 
@@ -39,97 +40,80 @@ This project aims to develop a machine learning-based predictive system that can
 7. **DiabetesPedigreeFunction** – Diabetes likelihood based on family history
 8. **Age** – Age of the patient in years
 
-**Additional Data:**
-- Synthetic patient records will be generated for real-time pipeline evaluation, simulating live clinical data intake streams using statistical distributions from the training data
-
 ---
 
 ## Planned Model and System Approach
 
-### 1. **Data Preprocessing Pipeline**
+### 1. Data Preprocessing Pipeline
 - Handle missing and zero values appropriately
 - Feature scaling and normalization
 - Address class imbalance in the target variable
 - Data exploration and statistical analysis
 
-### 2. **Machine Learning Models**
-The project will train and evaluate four classification models:
-- **Logistic Regression** – Baseline linear model for interpretability
-- **Random Forest** – Ensemble method for robustness and feature importance
-- **XGBoost** – Gradient boosting for high predictive performance
-- **Support Vector Machine (SVM)** – Non-linear classifier for decision boundary separation
+### 2. Machine Learning Models
+- **Logistic Regression** – Baseline linear model
+- **Random Forest** – Ensemble method with feature importance
+- **XGBoost** – Gradient boosting (best baseline model, used for inference)
+- **Support Vector Machine (SVM)** – Non-linear classifier
 
-### 3. **Model Evaluation and Comparison**
-All models will be evaluated using:
-- **Accuracy** – Overall correctness of predictions
-- **Precision** – True positive rate among predicted positives
-- **Recall** – True positive rate among actual positives
-- **F1-Score** – Harmonic mean of precision and recall
-- **AUC-ROC Curve** – Trade-off between true positive and false positive rates
+### 3. Model Evaluation and Comparison
+- Accuracy, Precision, Recall, F1-Score, AUC-ROC
 
-### 4. **Real-Time Inference Pipeline**
-- Integration of the best-performing model into a live prediction system
-- Batch processing of simulated patient records with confidence scores
-- Feature importance analysis for model interpretability
+### 4. Real-Time Inference Pipeline
+- `src/inference.py` loads baseline XGBoost, scaler, and imputation stats
+- Batch scoring via synthetic patient CSV
 
-### 5. **Interactive Web Application (Streamlit)**
-- User-friendly interface for clinicians to input patient vitals
-- Real-time diabetes risk predictions with confidence scores
-- Feature importance visualization showing which factors most influence predictions
-- Visual comparison of model performance metrics
-
-### 6. **Technology Stack**
-- **Data Processing:** Pandas, NumPy
-- **Machine Learning:** Scikit-learn, XGBoost
-- **Visualization:** Matplotlib, Seaborn
-- **Web Framework:** Streamlit
-- **Version Control:** Git/GitHub
+### 5. Interactive Web Application (Streamlit)
+- Single-patient risk prediction
+- Synthetic batch demo
+- Model metrics and plots from `results/`
 
 ---
 
 ## Current Implementation Progress
 
-**In Progress:**
-- 🔄 Environment setup and dependency installation
-- 🔄 Data loading and exploratory data analysis (EDA)
+**Completed:**
+- Exploratory data analysis (`01eda.py`)
+- Data preprocessing and artifact export (`02_preprocessing.py`)
+- Model training and comparison (`03_model_training.py`)
+- XGBoost hyperparameter optimization (`04_optimize_best_model.py`)
+- Shared preprocessing utilities (`src/preprocessing_utils.py`)
+- Inference module (`src/inference.py`) — **baseline XGBoost**
+- Synthetic data generator (`scripts/generate_synthetic.py`)
+- Streamlit demo app (`app/streamlit_app.py`)
 
-**Next Steps:**
-- [ ] Data preprocessing and cleaning
-- [ ] Handling missing values and class imbalance
-- [ ] Feature scaling and engineering
-- [ ] Model training (Logistic Regression, Random Forest, XGBoost, SVM)
-- [ ] Model evaluation and comparison
-- [ ] Best model selection and optimization
-- [ ] Real-time inference pipeline development
-- [ ] Streamlit web app development
-- [ ] Final demo preparation and testing
+**Note:** Optimized XGBoost is retained for comparison; inference uses baseline XGBoost because it achieves higher holdout AUC.
 
 ---
 
 ## Project Structure
 
 ```
-diabetes-prediction-ml/
+cmpe188-proj/
 ├── README.md
 ├── requirements.txt
+├── run_pipeline.sh
+├── 01eda.py
+├── 02_preprocessing.py
+├── 03_model_training.py
+├── 04_optimize_best_model.py
 ├── data/
 │   ├── pima-indians-diabetes.csv
 │   └── synthetic_data/
-├── notebooks/
-│   ├── 01_eda.ipynb
-│   ├── 02_preprocessing.ipynb
-│   └── 03_model_training.ipynb
 ├── src/
-│   ├── preprocessing.py
-│   ├── models.py
+│   ├── preprocessing_utils.py
 │   └── inference.py
 ├── app/
 │   └── streamlit_app.py
-├── results/
-│   ├── model_comparison.png
-│   ├── feature_importance.png
-│   └── roc_curves.png
-└── .gitignore
+├── scripts/
+│   ├── generate_synthetic.py
+│   └── generate_demo_summary.py
+└── results/
+    ├── model_metrics.csv
+    ├── xgboost.pkl
+    ├── scaler.pkl
+    ├── imputation_stats.pkl
+    └── demo_metrics_summary.md
 ```
 
 ---
@@ -138,25 +122,51 @@ diabetes-prediction-ml/
 
 ### Prerequisites
 - Python 3.8 or higher
-- pip or conda package manager
+- pip
 
 ### Installation
+
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd diabetes-prediction-ml
+git clone https://github.com/BhargavJakkaraju/cmpe188-proj.git
+cd cmpe188-proj
 
-# Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Running the Application
+### Run full pipeline
+
 ```bash
-# Run Streamlit web app
+chmod +x run_pipeline.sh
+./run_pipeline.sh
+```
+
+Or step by step:
+
+```bash
+python 01eda.py
+python 02_preprocessing.py
+python 03_model_training.py
+python 04_optimize_best_model.py
+python scripts/generate_synthetic.py --n 20
+python scripts/generate_demo_summary.py
+```
+
+### Inference CLI
+
+```bash
+# Single patient (JSON with 8 base features)
+python -m src.inference --input patient.json
+
+# Batch CSV
+python -m src.inference --csv data/synthetic_data/synthetic_patients.csv
+```
+
+### Streamlit app
+
+```bash
 streamlit run app/streamlit_app.py
 ```
 
@@ -168,19 +178,15 @@ streamlit run app/streamlit_app.py
 - UCI Machine Learning Repository – Pima Indians Diabetes Dataset: https://archive.ics.uci.edu/ml/datasets/Diabetes
 - Kaggle Mirror: https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database
 
-**Open Source Libraries:**
-- Scikit-learn (ML models): https://github.com/scikit-learn/scikit-learn
-- XGBoost (Gradient boosting): https://github.com/dmlc/xgboost
-- Streamlit (Web framework): https://github.com/streamlit/streamlit
-- Pandas (Data processing): https://github.com/pandas-dev/pandas
-- NumPy (Numerical computing): https://github.com/numpy/numpy
-- Matplotlib (Visualization): https://github.com/matplotlib/matplotlib
-- Seaborn (Statistical visualization): https://github.com/mwaskom/seaborn
+**Libraries:**
+- Scikit-learn, XGBoost, Streamlit, Pandas, NumPy, Matplotlib, Seaborn
 
 ---
 
 ## License
-[Specify your license here - e.g., MIT, Apache 2.0, etc.]
+
+MIT License. See repository for details.
 
 ## Contact
-[Add contact information or team email]
+
+Bhargav Jakkaraju — https://github.com/BhargavJakkaraju

@@ -7,13 +7,17 @@ exploratory data analysis to understand data characteristics, distributions,
 and potential data quality issues.
 """
 
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-DATA_URL = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/diabetes.data.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from src.preprocessing_utils import clean_dataset
+
+DATA_URL = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv"
 LOCAL_DATA_PATH = "data/pima-indians-diabetes.csv"
 
 COLUMN_NAMES = [
@@ -44,7 +48,9 @@ def load_data(url=DATA_URL, local_path=LOCAL_DATA_PATH):
     try:
         if Path(local_path).exists():
             print(f"Loading data from local file: {local_path}")
-            df = pd.read_csv(local_path, names=COLUMN_NAMES)
+            df = pd.read_csv(local_path)
+            if "Pregnancies" not in df.columns:
+                df = pd.read_csv(local_path, names=COLUMN_NAMES)
         else:
             print(f"Downloading data from {url}...")
             df = pd.read_csv(url, names=COLUMN_NAMES)
@@ -234,6 +240,8 @@ def main():
     if df is None:
         print("Failed to load data. Exiting.")
         return
+
+    df = clean_dataset(df)
  
     basic_statistics(df)
     class_distribution(df)
